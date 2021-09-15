@@ -28,7 +28,7 @@ toWin :: Int
 toWin = 3
 
 emptyBoard :: Board
-emptyBoard = replicate height $ replicate width $ Empty
+emptyBoard = replicate height . replicate width $ Empty
 
 -------------
 
@@ -99,7 +99,7 @@ getMove player = do
   hFlush stdout
   line <- getLine
 
-  if (all isDigit line) && (not . null $ line)
+  if all isDigit line && (not . null $ line)
     then return (read line)
     else do
       putStrLn "Not a valid move!"
@@ -121,18 +121,18 @@ isContainedIn xs = any (isInfixOf xs)
 
 -- Computes the diagonals of a 2D list through shifting of the rows -> https://stackoverflow.com/questions/37511914
 diags :: [[a]] -> [[a]]
-diags xs = (help xs) ++ (help $ reverse xs)
+diags xs = help xs ++ help (reverse xs)
   where
     help = map concat . transpose . padding 0 . listify
 
     -- Encloses each element in a lists of lists into a separate list
-    listify = map (\row -> map (: []) row)
+    listify = map (map (: []))
 
     padding _ [] = []
     padding n (y : ys) = (replicate n [] ++ y) : padding (n + 1) ys
 
 isBoardFull :: Board -> Bool
-isBoardFull = and . map (all (/= Empty))
+isBoardFull = all (notElem Empty)
 
 nextPlayer :: Player -> Player
 nextPlayer X = O
@@ -150,8 +150,8 @@ isValid :: Move -> Board -> Bool
 isValid move board = inBounds && isEmpty
   where
     (row, col) = getPosition move
-    inBounds = move <= (width * height) && move >= 1
-    isEmpty = (board !! row) !! col == Empty
+    inBounds = move <= width * height && move >= 1
+    isEmpty = board !! row !! col == Empty
 
 -- Places the current player's symbol to a given cell on the board
 placeMove :: Move -> Player -> Board -> Board
