@@ -68,9 +68,7 @@ gameLoop player board = do
   if isValid move board
     then do
       let newBoard = placeMove move player board
-
       renderBoard newBoard
-
       checkGameResult player newBoard
     else do
       putStrLn "Not a valid move!"
@@ -79,23 +77,20 @@ gameLoop player board = do
 -- Takes specific actions according to the current state of the game
 checkGameResult :: Player -> Board -> IO ()
 checkGameResult player board
-  | gameOver = putStrLn ("Player " ++ show player ++ " won!") >> promptToRestart
-  | boardFull = putStrLn "The game is a DRAW!" >> promptToRestart
-  | otherwise = gameLoop (nextPlayer player) board
-  where
-    gameOver = isGameOver player board
-    boardFull = isBoardFull board
+  | isGameOver player board = putStrLn ("Player " ++ show player ++ " won!") >> restartGame
+  | isBoardFull board = putStrLn "The game is a DRAW!" >> restartGame
+  | otherwise = gameLoop (next player) board
 
 -- Prompts the player to play again and validates the input
-promptToRestart :: IO ()
-promptToRestart = do
+restartGame :: IO ()
+restartGame = do
   putStr "Restart the game? (yes or no) "
   answer <- getLine
 
   case answer of
     "yes" -> main
     "no" -> putStrLn "Thank you for playing :)"
-    _ -> putStrLn "Input either yes or no!" >> promptToRestart
+    _ -> putStrLn "Input either yes or no!" >> restartGame
 
 -- Prompts the current player for a move and validates the input
 getMove :: Player -> IO Move
@@ -103,7 +98,7 @@ getMove player = do
   putStr $ "Player " ++ show player ++ "'s " ++ "turn: "
   line <- getLine
 
-  if all isDigit line && (not . null $ line)
+  if all isDigit line && line /= []
     then return (read line)
     else do
       putStrLn "Not a valid move!"
@@ -112,12 +107,9 @@ getMove player = do
 {- Checks rows, cols and diagonals for a win. The function is designed to cater
 for an arbitrary number of rows, cols and pieces, that are needed to win a game. -}
 isGameOver :: Player -> Board -> Bool
-isGameOver player board = isRowWin || isColWin || isDiagWin
+isGameOver player board = any (isContainedIn winSeq) [board, transpose board, diags board]
   where
-    winSequence = replicate toWin $ Filled player
-    isRowWin = winSequence `isContainedIn` board
-    isColWin = winSequence `isContainedIn` transpose board
-    isDiagWin = winSequence `isContainedIn` diags board
+    winSeq = replicate toWin (Filled player)
 
 -- Checks if a lists is an infix of ANY of the subsequent lists inside xss
 isContainedIn :: Eq a => [a] -> [[a]] -> Bool
@@ -138,9 +130,9 @@ diags xs = help xs ++ help (reverse xs)
 isBoardFull :: Board -> Bool
 isBoardFull = all (notElem Empty)
 
-nextPlayer :: Player -> Player
-nextPlayer X = O
-nextPlayer O = X
+next :: Player -> Player
+next X = O
+next O = X
 
 -- Retrieves the row and col of a given cell
 getPosition :: Move -> (Int, Int)
