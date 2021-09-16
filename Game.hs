@@ -1,17 +1,17 @@
 module Game where
 
 import Data.Char (isDigit)
-import Data.List (isInfixOf, reverse, transpose)
-import System.IO (hFlush, stdout)
+import Data.List (intercalate, intersperse, isInfixOf, reverse, transpose)
+import System.IO (BufferMode (NoBuffering), hSetBuffering, stdout)
 
-data Player = X | O deriving (Eq, Show)
+data Player = O | B | X deriving (Eq, Ord, Show)
 
 data Cell = Filled Player | Empty deriving (Eq)
 
 instance Show Cell where
-  show (Filled X) = "X"
-  show (Filled O) = "O"
-  show Empty = " "
+  show (Filled X) = " X "
+  show (Filled O) = " O "
+  show Empty = "   "
 
 type Board = [[Cell]]
 
@@ -27,20 +27,23 @@ height = 3
 toWin :: Int
 toWin = 3
 
+depth :: Int
+depth = 5
+
 emptyBoard :: Board
 emptyBoard = replicate height . replicate width $ Empty
 
 -------------
 
 -- Rendering functions
-renderRow :: [Cell] -> IO ()
-renderRow row = putStrLn $ unwords $ [show col ++ " |" | col <- init row] ++ [show $ last row]
+showRow :: [Cell] -> String
+showRow = intercalate "|" . map show
 
-renderRowSeparator :: IO ()
-renderRowSeparator = putStrLn "- - - - -"
+rowSep :: String
+rowSep = "---+---+---"
 
 renderBoard :: Board -> IO ()
-renderBoard board = sequence_ $ putChar '\n' : [renderRow row >> renderRowSeparator | row <- init board] ++ [renderRow $ last board]
+renderBoard = putStrLn . unlines . intersperse rowSep . map showRow
 
 welcomeScreen :: IO ()
 welcomeScreen = do
@@ -51,6 +54,8 @@ welcomeScreen = do
 
 main :: IO ()
 main = do
+  hSetBuffering stdout NoBuffering
+
   welcomeScreen
   renderBoard emptyBoard
   gameLoop X emptyBoard
@@ -96,7 +101,6 @@ promptToRestart = do
 getMove :: Player -> IO Move
 getMove player = do
   putStr $ "Player " ++ show player ++ "'s " ++ "turn: "
-  hFlush stdout
   line <- getLine
 
   if all isDigit line && (not . null $ line)
