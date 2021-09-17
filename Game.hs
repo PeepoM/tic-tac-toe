@@ -4,7 +4,9 @@ import Data.Char (isDigit)
 import Data.List (intercalate, intersperse, isInfixOf, reverse, transpose)
 import System.IO (BufferMode (NoBuffering), hSetBuffering, stdout)
 
-data Player = O | B | X deriving (Eq, Ord, Show)
+-- As player implements Ord, the relation X < B < O
+-- is very important for the correct working of the Minimax algorithm
+data Player = X | B | O deriving (Eq, Ord, Show)
 
 data Cell = Filled Player | Empty deriving (Eq)
 
@@ -28,7 +30,7 @@ toWin :: Int
 toWin = 3
 
 depth :: Int
-depth = 5
+depth = 9
 
 emptyBoard :: Board
 emptyBoard = replicate height . replicate width $ Empty
@@ -62,23 +64,29 @@ main = do
 
 -- The driver code of the whole game
 gameLoop :: Player -> Board -> IO ()
-gameLoop player board = do
-  move <- getMove player
+gameLoop player board
+  | player == X = do
+    move <- getMove player
 
-  if isValid move board
-    then do
-      let newBoard = placeMove move player board
-      renderBoard newBoard
-      checkGameResult player newBoard
-    else do
-      putStrLn "Not a valid move!"
-      gameLoop player board
+    if isValid move board
+      then manageMove player (placeMove move player board)
+      else do
+        putStrLn "Not a valid move!"
+        gameLoop player board
+  | player == O = do
+    putStrLn "Constructing the game tree..."
+    manageMove player (computerMove board)
+
+manageMove :: Player -> Board -> IO ()
+manageMove player board = do
+  renderBoard board
+  checkGameState player board
 
 -- Takes specific actions according to the current state of the game
-checkGameResult :: Player -> Board -> IO ()
-checkGameResult player board
-  | isGameOver player board = putStrLn ("Player " ++ show player ++ " won!") >> restartGame
-  | isBoardFull board = putStrLn "The game is a DRAW!" >> restartGame
+checkGameState :: Player -> Board -> IO ()
+checkGameState player board
+  | gameOver player board = putStrLn ("Player " ++ show player ++ " won!") >> restartGame
+  | boardFull board = putStrLn "The game is a DRAW!" >> restartGame
   | otherwise = gameLoop (next player) board
 
 -- Prompts the player to play again and validates the input
@@ -106,8 +114,8 @@ getMove player = do
 
 {- Checks rows, cols and diagonals for a win. The function is designed to cater
 for an arbitrary number of rows, cols and pieces, that are needed to win a game. -}
-isGameOver :: Player -> Board -> Bool
-isGameOver player board = any (isContainedIn winSeq) [board, transpose board, diags board]
+gameOver :: Player -> Board -> Bool
+gameOver player board = any (isContainedIn winSeq) [board, transpose board, diags board]
   where
     winSeq = replicate toWin (Filled player)
 
@@ -127,8 +135,8 @@ diags xs = help xs ++ help (reverse xs)
     padding _ [] = []
     padding n (y : ys) = (replicate n [] ++ y) : padding (n + 1) ys
 
-isBoardFull :: Board -> Bool
-isBoardFull = all (notElem Empty)
+boardFull :: Board -> Bool
+boardFull = all (notElem Empty)
 
 next :: Player -> Player
 next X = O
@@ -160,3 +168,50 @@ placeMove move player board = insertAt row modifiedRow board
 -- Inserts an element to the nth position of a given list
 insertAt :: Int -> a -> [a] -> [a]
 insertAt n x xs = take n xs ++ [x] ++ drop (n + 1) xs
+
+--------- AI with Minimax algorithm ---------
+
+data Tree a = Node a [Tree a] deriving (Show)
+
+-- Given the current player and board, construct a list of all possible moves
+possibleBoards :: Player -> Board -> [Board]
+possibleBoards p b
+  | gameOver O b = []
+  | gameOver X b = []
+  | boardFull b = []
+  | otherwise = map (\m -> placeMove m p b) moves
+  where
+    moves = filter (`isValid` b) [1 .. width * height]
+
+-- Given the current player and board state, construct the game tree
+gameTree :: Player -> Board -> Tree Board
+gameTree p b = Node b [gameTree (next p) b | b <- possibleBoards p b]
+
+-- Limit the depth of a tree to a certain number
+prune :: Int -> Tree a -> Tree a
+prune 0 (Node x _) = Node x []
+prune n (Node x xs) = Node x [prune (n - 1) e | e <- xs]
+
+minimax :: Player -> Tree Board -> Tree (Board, Player)
+minimax player (Node b [])
+  | gameOver X b = Node (b, X) []
+  | gameOver O b = Node (b, O) []
+  | otherwise = Node (b, B) []
+minimax player (Node b bs)
+  | player == X = Node (b, minimum sublabels) tree
+  | player == O = Node (b, maximum sublabels) tree
+  where
+    -- Recursively label the whole subtree of boards
+    tree = [minimax (next player) b | b <- bs]
+    -- Get player labels from one level down
+    sublabels = [p | Node (_, p) _ <- tree]
+
+computerMove :: Board -> Board
+-- Filter out the trees from one level down, that have the same player label as "root"
+computerMove board = head [b | Node (b, p) _ <- ts, p == root]
+  where
+    -- Generate tree of all possible games for a given board
+    tree = prune depth $ gameTree O board
+    -- Label the whole game tree using minimax
+    -- get the root node player label "root" and the labeled subtrees "ts"
+    Node (_, root) ts = minimax O tree
